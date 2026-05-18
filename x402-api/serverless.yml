@@ -1,0 +1,46 @@
+service: taskvault-x402-api
+frameworkVersion: "3"
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${env:AWS_REGION, "us-east-1"}
+  stage: ${opt:stage, "dev"}
+  memorySize: 512
+  timeout: 60
+  environment:
+    RECIPIENT_WALLET: ${env:RECIPIENT_WALLET}
+    PRICE_USDC: ${env:PRICE_USDC, "0.01"}
+    USDC_ADDRESS: ${env:USDC_ADDRESS, "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"}
+    NETWORK: ${env:NETWORK, "arbitrum-sepolia"}
+    BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+            - bedrock:InvokeModelWithResponseStream
+          Resource: "*"
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node20
+    platform: node
+
+functions:
+  premiumNews:
+    handler: src/handler.premiumNews
+    events:
+      - httpApi:
+          path: /premium-news
+          method: GET

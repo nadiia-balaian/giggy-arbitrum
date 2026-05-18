@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #f5efe4;
+  --color-ink: #0a0a0a;
+  --color-coral: #ffb5a7;
+  --color-coral-deep: #ff8a72;
+  --color-yellow: #ffe74c;
+  --color-sky: #7cc6e8;
+  --color-mint: #a8e6cf;
+  --color-cream: #fff8e7;
+  --color-muted: #d8d2c4;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --shadow-doodle-sm: 2px 2px 0 0 #0a0a0a;
+  --shadow-doodle: 4px 4px 0 0 #0a0a0a;
+  --shadow-doodle-lg: 6px 6px 0 0 #0a0a0a;
+
+  --radius-doodle: 1.25rem;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-ink);
+  }
+}
+
+@utility border-ink-2 {
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--color-ink);
+}
+
+@utility border-ink-3 {
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--color-ink);
+}
+
+@utility press {
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+@utility press-hover {
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: var(--shadow-doodle-lg);
+  }
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: var(--shadow-doodle-sm);
+  }
+}
