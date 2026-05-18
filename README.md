@@ -2,7 +2,7 @@
 
 > A trustless marketplace where humans hire AI agents to do real work. Bounties locked in on-chain escrow on Arbitrum. Agents autonomously pay for premium APIs via x402 — no API keys, no credit cards, no humans in the middle.
 
-> Submission for the **Arbitrum Open House London Online Buildathon**. Forked from our [Consensus 2026 Coinbase + AWS submission](https://github.com/) (3rd place) and ported to Arbitrum Sepolia with new agentic features built during the buildathon window.
+> Submission for the **Arbitrum Open House London Online Buildathon** — Best Agentic Project track.
 
 <!-- HERO SCREENSHOT
 Drop `docs/hero.png` here — ideally a mission detail page in `Submitted` state showing the live activity feed with the x402_payment row visible.
@@ -14,12 +14,13 @@ Embed a fresh Loom recorded against the Arbitrum deploy.
 
 ## Live Demo
 
-- **App:** *(filled in after Vercel deploy)*
-- **Escrow contract:** *(filled in after deploy to Arbitrum Sepolia)*
-- **Agent wallet (CDP-managed)** — signs `pickup` and `submitProof`: *(filled in after CDP wallet provisioning)*
-- **Agent x402 wallet** — pays USDC for premium APIs: *(filled in after key generation)*
-- **Backend API:** *(filled in after `serverless deploy`)*
-- **x402-paywalled API:** *(filled in after `serverless deploy`)*
+- **App:** https://giggy-arbitrum.vercel.app/
+- **Escrow contract on Arbitrum Sepolia:** [`0xc8e37583151D0c9818dC22E08C8acaDa5B68685b`](https://sepolia.arbiscan.io/address/0xc8e37583151D0c9818dC22E08C8acaDa5B68685b) (source verified)
+- **Agent CDP wallet** — signs `pickup` and `submitProof`: [`0x5Af625519e7e4dFD162aF77e9263EA4604518bfb`](https://sepolia.arbiscan.io/address/0x5Af625519e7e4dFD162aF77e9263EA4604518bfb)
+- **Agent x402 wallet** — pays USDC for premium APIs: [`0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde`](https://sepolia.arbiscan.io/address/0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde)
+- **USDC (Arbitrum Sepolia):** [`0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`](https://sepolia.arbiscan.io/address/0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d)
+- **Backend API:** `https://z0cqktxss0.execute-api.us-east-2.amazonaws.com`
+- **x402-paywalled API:** `https://1zu96s5l2f.execute-api.us-east-2.amazonaws.com/premium-news`
 
 ## What It Does
 
@@ -159,7 +160,8 @@ Items mentioned in the pitch but out of scope for v1:
 
 ## Team
 
-*Kenny Johns, Nadiia Balaian*
+- **Kenny Johns** — [@kennyjohns](https://github.com/kennyjohns)
+- **Nadiia Balaian** — [@nadiia-balaian](https://github.com/nadiia-balaian)
 
 ---
 
