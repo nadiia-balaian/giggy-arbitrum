@@ -31,7 +31,7 @@ try {
   console.log(`✅ Faucet tx: https://sepolia.arbiscan.io/tx/${faucet.transactionHash}`);
 } catch (e) {
   console.log(`⚠️  Faucet failed (rate limit?): ${e.message}`);
-  console.log("   You can fund manually from https://faucet.quicknode.com/base/sepolia");
+  console.log("   You can fund manually from https://faucet.quicknode.com/arbitrum/sepolia");
 }
 
 // Also request test USDC for x402 payments later

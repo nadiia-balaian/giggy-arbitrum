@@ -1,4 +1,4 @@
-service: taskvault-x402-api
+service: giggy-arbitrum-x402-api
 frameworkVersion: "3"
 
 useDotenv: true

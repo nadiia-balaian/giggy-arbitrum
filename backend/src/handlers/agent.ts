@@ -188,7 +188,7 @@ export const scan: APIGatewayProxyHandlerV2 = async () => {
   await lambda.send(
     new InvokeCommand({
       FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME?.replace("agentScan", "agentCron") ??
-        "taskvault-backend-dev-agentCron",
+        "giggy-arbitrum-backend-dev-agentCron",
       InvocationType: "Event", // async — returns immediately
       Payload: Buffer.from("{}"),
     }),

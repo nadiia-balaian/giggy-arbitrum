@@ -1,8 +1,8 @@
 {
   "arbitrumSepolia": {
     "chainId": 421614,
-    "TaskEscrow": "",
+    "TaskEscrow": "0xc8e37583151D0c9818dC22E08C8acaDa5B68685b",
     "USDC": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
-    "agent": ""
+    "agent": "0x5Af625519e7e4dFD162aF77e9263EA4604518bfb"
   }
 }
