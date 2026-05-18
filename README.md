@@ -160,7 +160,7 @@ Items mentioned in the pitch but out of scope for v1:
 
 ## Team
 
-- **Kenny Johns** — [@kennyjohns](https://github.com/kennyjohns)
+- **Kenny Johns** — [@kenjohnscreates](https://github.com/kenjohnscreates)
 - **Nadiia Balaian** — [@nadiia-balaian](https://github.com/nadiia-balaian)
 
 ---
