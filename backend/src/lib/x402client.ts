@@ -1,22 +1,20 @@
-// x402 buyer-side client.
+// x402 buyer-side client (v2 protocol).
 //
-// Uses a dedicated hot key for x402 signing, separate from the CDP-managed
-// wallet that signs pickup/submitProof. We tried bridging CDP into a viem
-// LocalAccount first; x402-axios's runtime check rejected it ("does not
-// support signTypedData") because EIP-3009 needs a viem-native typed-data
-// signer. Hot key = simplest viable signer, no SDK gymnastics.
+// Uses @x402/fetch + @x402/evm with the eip155:* wildcard so the same client
+// works on every EVM chain, including Arbitrum Sepolia (eip155:421614) which
+// the legacy v1 lib doesn't list in its NetworkSchema enum.
 //
-// In a v2 marketplace each agent would have its own CDP-managed payment
-// wallet. For this hackathon, one shared hot key signed and funded out of
-// our scripts/ folder is fine.
+// Signer: a viem LocalAccount from X402_CLIENT_PRIVATE_KEY. Separate hot key
+// from the CDP-managed escrow agent, scoped to EIP-3009 USDC
+// transferWithAuthorization off-chain signatures only.
 
-import axios, { type AxiosResponse } from "axios";
-import { withPaymentInterceptor, decodeXPaymentResponse } from "x402-axios";
+import { wrapFetchWithPaymentFromConfig, decodePaymentResponseHeader } from "@x402/fetch";
+import { ExactEvmScheme } from "@x402/evm";
 import { privateKeyToAccount } from "viem/accounts";
 
 const PRIVATE_KEY = process.env.X402_CLIENT_PRIVATE_KEY ?? "";
 
-let cachedClient: ReturnType<typeof axios.create> | null = null;
+let cachedFetch: typeof fetch | null = null;
 let cachedAddress: `0x${string}` | null = null;
 
 function buildClient() {
@@ -25,15 +23,20 @@ function buildClient() {
   }
   const account = privateKeyToAccount(PRIVATE_KEY as `0x${string}`);
   cachedAddress = account.address;
-  cachedClient = withPaymentInterceptor(axios.create(), account);
-  return cachedClient;
+
+  cachedFetch = wrapFetchWithPaymentFromConfig(fetch, {
+    schemes: [
+      // eip155:* matches every EVM chain — Base, Arbitrum, Polygon, …
+      { network: "eip155:*", client: new ExactEvmScheme(account) },
+    ],
+  });
+  return cachedFetch;
 }
 
 function client() {
-  return cachedClient ?? buildClient();
+  return cachedFetch ?? buildClient();
 }
 
-/** Returns the x402 payer wallet's EVM address. */
 export function getX402PayerAddress(): `0x${string}` {
   if (cachedAddress) return cachedAddress;
   buildClient();
@@ -49,16 +52,23 @@ export interface X402Result<T> {
 }
 
 /**
- * GET a URL through the x402 interceptor. If the server returns 402,
- * x402-axios automatically signs payment and retries. Returns the data
- * plus the settled tx hash extracted from `X-PAYMENT-RESPONSE`.
+ * GET a URL with automatic x402 payment handling. If the server returns 402,
+ * the client signs an EIP-3009 USDC transfer for the configured network,
+ * retries with X-PAYMENT, and returns the data + settled tx hash extracted
+ * from X-PAYMENT-RESPONSE.
  */
 export async function x402Get<T>(url: string): Promise<X402Result<T>> {
-  const c = client();
-  const res: AxiosResponse<T> = await c.get(url);
-  const settled = decodeXPaymentResponse(res.headers["x-payment-response"]);
+  const res = await client()(url, { method: "GET" });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`x402 fetch failed ${res.status}: ${text}`);
+  }
+  const data = (await res.json()) as T;
+
+  const settledHeader = res.headers.get("x-payment-response");
+  const settled = settledHeader ? decodePaymentResponseHeader(settledHeader) : null;
   return {
-    data: res.data,
+    data,
     txHash: settled?.transaction ?? null,
     payer: (settled?.payer as `0x${string}` | undefined) ?? null,
   };

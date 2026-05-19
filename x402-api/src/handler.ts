@@ -1,125 +1,149 @@
 import type { APIGatewayProxyHandlerV2, APIGatewayProxyResultV2 } from "aws-lambda";
-import { useFacilitator } from "x402/verify";
-import type { PaymentPayload, PaymentRequirements } from "x402/types";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+import {
+  encodePaymentRequiredHeader,
+  encodePaymentResponseHeader,
+  decodePaymentSignatureHeader,
+} from "@x402/core/http";
+import type {
+  PaymentPayload,
+  PaymentRequirements,
+  PaymentRequired,
+} from "@x402/core/types";
 import { invokeClaude } from "./bedrock.js";
 
 // GET /premium-news?topic=...
 //
-// HTTP-native paid endpoint per the x402 spec.
-//   1st call (no X-PAYMENT header): returns 402 + payment requirements.
-//   2nd call (with valid X-PAYMENT): facilitator verifies + settles the USDC
-//     micropayment on Arbitrum Sepolia, then we serve the data with the settled
-//     tx hash in the X-PAYMENT-RESPONSE header.
+// HTTP-native paid endpoint, x402 v2 protocol.
+//   1st call (no X-PAYMENT header): returns 402 + PaymentRequired body.
+//   2nd call (valid X-PAYMENT): facilitator verifies + settles the USDC
+//     micropayment on Arbitrum Sepolia (eip155:421614), then we serve the
+//     data with the settled tx hash in the X-PAYMENT-RESPONSE header.
 //
-// We delegate verify + settle to Coinbase's hosted facilitator (default URL,
-// no api key needed for arbitrum-sepolia). That way this Lambda doesn't need
-// its own ETH for gas — the facilitator pays.
+// We use the foundation's hosted facilitator at https://x402.org/facilitator
+// (the default — no API key needed). It pays the gas to settle the
+// transferWithAuthorization on-chain, so this Lambda stays gas-free.
 
-const { verify, settle } = useFacilitator();
+const facilitator = new HTTPFacilitatorClient();
 
 const RECIPIENT = (process.env.RECIPIENT_WALLET ??
   "0x0000000000000000000000000000000000000000") as `0x${string}`;
 const USDC = (process.env.USDC_ADDRESS ??
   "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d") as `0x${string}`;
 const PRICE_USDC = process.env.PRICE_USDC ?? "0.01";
+// CAIP-2 network identifier — v2 uses these instead of friendly names.
+const NETWORK = (process.env.X402_NETWORK ?? "eip155:421614") as `${string}:${string}`;
 
-// Convert "0.01" USDC → "10000" (USDC has 6 decimals).
 function priceToAtomic(usd: string): string {
   return BigInt(Math.round(Number(usd) * 1_000_000)).toString();
 }
 
-function buildRequirements(topic: string): PaymentRequirements {
+function buildRequirements(): PaymentRequirements {
   return {
     scheme: "exact",
-    network: "arbitrum-sepolia",
-    maxAmountRequired: priceToAtomic(PRICE_USDC),
-    resource: `https://x402-api.taskvault.dev/premium-news?topic=${encodeURIComponent(topic)}`,
-    description: "TaskVault premium news access",
-    mimeType: "application/json",
+    network: NETWORK,
+    asset: USDC,
+    amount: priceToAtomic(PRICE_USDC),
     payTo: RECIPIENT,
     maxTimeoutSeconds: 60,
-    asset: USDC,
     extra: {
-      name: "USDC",
+      name: "USD Coin",
       version: "2",
     },
   };
 }
 
-export const premiumNews: APIGatewayProxyHandlerV2 = async (event) => {
-  const headers = event.headers ?? {};
-  const xPayment = headers["x-payment"] ?? headers["X-PAYMENT"];
-  const topic = event.queryStringParameters?.topic ?? "general";
-  const requirements = buildRequirements(topic);
+function buildPaymentRequired(topic: string, errorReason?: string): PaymentRequired {
+  return {
+    x402Version: 2,
+    error: errorReason ?? "Payment required",
+    resource: {
+      url: `https://x402-api.giggy-arbitrum.dev/premium-news?topic=${encodeURIComponent(topic)}`,
+      description: "Giggy premium news access (Claude-generated, topic-specific)",
+      mimeType: "application/json",
+      serviceName: "Giggy Premium News",
+    },
+    accepts: [buildRequirements()],
+  };
+}
 
-  if (!xPayment) {
-    return paymentRequired(requirements);
+export const premiumNews: APIGatewayProxyHandlerV2 = async (event) => {
+  // API Gateway HTTP API v2 lowercases header keys. v2 protocol sends
+  // PAYMENT-SIGNATURE; v1 sent X-PAYMENT — accept either for compat.
+  const headers = event.headers ?? {};
+  const sigHeader =
+    headers["payment-signature"] ?? headers["x-payment"] ?? null;
+  const topic = event.queryStringParameters?.topic ?? "general";
+  const requirements = buildRequirements();
+
+  if (!sigHeader) {
+    return paymentRequiredResponse(buildPaymentRequired(topic));
   }
 
   let payload: PaymentPayload;
   try {
-    payload = JSON.parse(Buffer.from(xPayment, "base64").toString("utf8"));
+    payload = decodePaymentSignatureHeader(sigHeader) as PaymentPayload;
   } catch {
-    return paymentRequired(requirements, "Invalid X-PAYMENT header");
+    return paymentRequiredResponse(
+      buildPaymentRequired(topic, "Invalid PAYMENT-SIGNATURE header"),
+    );
   }
 
-  // 1. Verify the signature + balance + amount via the facilitator
-  const verifyRes = await verify(payload, requirements);
+  // 1. Verify (signature + balance + amount) via facilitator
+  const verifyRes = await facilitator.verify(payload, requirements);
   if (!verifyRes.isValid) {
-    return paymentRequired(requirements, verifyRes.invalidReason ?? "verify_failed");
+    return paymentRequiredResponse(
+      buildPaymentRequired(topic, verifyRes.invalidReason ?? "verify_failed"),
+    );
   }
 
-  // 2. Settle on-chain — the facilitator submits the USDC transferWithAuthorization
-  const settleRes = await settle(payload, requirements);
+  // 2. Settle on-chain — facilitator submits the EIP-3009 transferWithAuthorization
+  const settleRes = await facilitator.settle(payload, requirements);
   if (!settleRes.success) {
-    return paymentRequired(requirements, settleRes.errorReason ?? "settle_failed");
+    return paymentRequiredResponse(
+      buildPaymentRequired(topic, settleRes.errorReason ?? "settle_failed"),
+    );
   }
 
-  // 3. Generate genuinely tailored research via Bedrock (paid Claude compute)
-  //    and serve it back along with the settled tx hash in X-PAYMENT-RESPONSE.
+  // 3. Bedrock generates the paid content
   const articles = await generateArticles(topic);
-  return ok(
-    { topic, articles },
-    {
-      "X-PAYMENT-RESPONSE": Buffer.from(
-        JSON.stringify({
-          success: true,
-          transaction: settleRes.transaction,
-          network: settleRes.network,
-          payer: settleRes.payer,
-        }),
-      ).toString("base64"),
+
+  // 4. Serve with the settled tx hash. v2 reads PAYMENT-RESPONSE; @x402/fetch
+  //    also reads X-PAYMENT-RESPONSE — send both so v1 + v2 clients work.
+  const settleHeader = encodePaymentResponseHeader(settleRes);
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": settleHeader,
+      "X-PAYMENT-RESPONSE": settleHeader,
+      "Access-Control-Expose-Headers": "PAYMENT-RESPONSE,X-PAYMENT-RESPONSE",
     },
-  );
+    body: JSON.stringify({ topic, articles }),
+  };
 };
 
-function paymentRequired(
-  requirements: PaymentRequirements,
-  errorReason?: string,
+// v2 servers must surface PaymentRequired via the PAYMENT-REQUIRED HTTP header
+// (base64 JSON). @x402/core/client only falls back to body parsing for v1
+// responses, so without this header the v2 client throws
+// "Invalid payment required response". We also include the JSON in the body
+// for human-readable debugging and v1 client compat.
+function paymentRequiredResponse(
+  paymentRequired: PaymentRequired,
 ): APIGatewayProxyResultV2 {
   return {
     statusCode: 402,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      x402Version: 1,
-      accepts: [requirements],
-      error: errorReason ?? "Payment required",
-    }),
-  };
-}
-
-function ok(body: unknown, extra: Record<string, string> = {}): APIGatewayProxyResultV2 {
-  return {
-    statusCode: 200,
-    headers: { "Content-Type": "application/json", ...extra },
-    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+      "PAYMENT-REQUIRED": encodePaymentRequiredHeader(paymentRequired),
+      "Access-Control-Expose-Headers": "PAYMENT-REQUIRED",
+    },
+    body: JSON.stringify(paymentRequired),
   };
 }
 
 // Bedrock-generated paid content. Each call returns a fresh, topic-specific
-// research bundle — the agent's $0.01 USDC pays for actual Claude compute,
-// not canned data. If Bedrock fails or returns malformed JSON we fall back
-// to a generic stub so the API never 5xxs after the user has already paid.
+// research bundle — the agent's $0.01 USDC pays for actual Claude compute.
 async function generateArticles(topic: string) {
   const system =
     "You write realistic-sounding industry research summaries for a paid news API. " +
@@ -147,14 +171,13 @@ Each summary 2-3 sentences. Mix incumbents and emerging players. Cite plausible 
       {
         title: `${topic}: industry overview, 2026`,
         summary: `Snapshot of the ${topic} sector — major players, funding, and macro trends.`,
-        source: "TaskVault Premium Wire (fallback)",
+        source: "Giggy Premium Wire (fallback)",
         publishedAt: now,
       },
     ];
   }
 }
 
-// Tolerate code fences and trailing prose around the JSON array.
 function extractJsonArray(text: string): unknown {
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   const candidate = (fence?.[1] ?? text).trim();
