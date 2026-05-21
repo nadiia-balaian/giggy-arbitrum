@@ -1,20 +1,63 @@
-import { CdpClient } from "@coinbase/cdp-sdk";
-import { encodeFunctionData, type Abi } from "viem";
+// Agent on-chain signer.
+//
+// Originally this module was a thin wrapper around the Coinbase CDP SDK
+// (hence the filename). CDP's sendTransaction returns 500 on Arbitrum
+// Sepolia today despite the SDK listing it as supported, so we run a
+// plain viem walletClient against the chain RPC instead. The agent's
+// signing key is the same hot key used for x402 payments — one EOA
+// covers both jobs, and the escrow's immutable agent slot was set to
+// that address at deploy time.
+//
+// The public API (getAgentAddress, sendTransaction, callContract) is
+// unchanged so escrow.ts and agent.ts don't need to know.
 
-let client: CdpClient | null = null;
+import {
+  createWalletClient,
+  createPublicClient,
+  http,
+  publicActions,
+  encodeFunctionData,
+  type Abi,
+  type Hex,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { arbitrumSepolia } from "viem/chains";
 
-function getCdp(): CdpClient {
-  if (!client) {
-    client = new CdpClient();
+const PRIVATE_KEY = (process.env.AGENT_PRIVATE_KEY ||
+  process.env.X402_CLIENT_PRIVATE_KEY ||
+  "") as Hex;
+
+const RPC_URL =
+  process.env.ARBITRUM_SEPOLIA_RPC ?? "https://sepolia-rollup.arbitrum.io/rpc";
+
+type WalletClient = ReturnType<typeof buildClient>;
+let cachedClient: WalletClient | null = null;
+let cachedAddress: `0x${string}` | null = null;
+
+function buildClient() {
+  if (!PRIVATE_KEY || !PRIVATE_KEY.startsWith("0x")) {
+    throw new Error(
+      "AGENT_PRIVATE_KEY (or X402_CLIENT_PRIVATE_KEY) env var is missing or malformed",
+    );
   }
-  return client;
+  const account = privateKeyToAccount(PRIVATE_KEY);
+  cachedAddress = account.address;
+  return createWalletClient({
+    account,
+    chain: arbitrumSepolia,
+    transport: http(RPC_URL),
+  }).extend(publicActions);
 }
 
-/** Returns the agent's EVM address (creates if first run, reuses if exists). */
+function client(): WalletClient {
+  return cachedClient ?? (cachedClient = buildClient());
+}
+
+/** Returns the agent's EVM address. */
 export async function getAgentAddress(): Promise<string> {
-  const cdp = getCdp();
-  const account = await cdp.evm.getOrCreateAccount({ name: "giggy-arbitrum-agent" });
-  return account.address;
+  if (cachedAddress) return cachedAddress;
+  client();
+  return cachedAddress!;
 }
 
 /** Send a raw transaction from the agent wallet. Returns tx hash. */
@@ -23,18 +66,17 @@ export async function sendTransaction(params: {
   data?: string;
   value?: bigint;
 }): Promise<string> {
-  const cdp = getCdp();
-  const address = await getAgentAddress();
-  const result = await cdp.evm.sendTransaction({
-    address,
-    transaction: {
-      to: params.to as `0x${string}`,
-      data: params.data as `0x${string}` | undefined,
-      value: params.value ? `0x${params.value.toString(16)}` : undefined,
-    },
-    network: "arbitrum-sepolia",
+  const c = client();
+  const txHash = await c.sendTransaction({
+    to: params.to as `0x${string}`,
+    data: (params.data ?? "0x") as `0x${string}`,
+    value: params.value,
   });
-  return result.transactionHash;
+  // Wait for inclusion so callers can rely on the tx having landed before
+  // logging the activity row. Matches the prior CDP behavior (CDP returned
+  // only after broadcast + receipt).
+  await c.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
 }
 
 /** Encode + send a contract call from the agent wallet. Returns tx hash. */
@@ -50,4 +92,13 @@ export async function callContract(params: {
     args: params.args,
   });
   return sendTransaction({ to: params.to, data });
+}
+
+// Keep an unused publicClient available if a future caller wants
+// read-only chain access without going through writeContract.
+export function getPublicClient() {
+  return createPublicClient({
+    chain: arbitrumSepolia,
+    transport: http(RPC_URL),
+  });
 }

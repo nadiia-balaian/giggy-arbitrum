@@ -15,9 +15,8 @@ Embed a fresh Loom recorded against the Arbitrum deploy.
 ## Live Demo
 
 - **App:** https://giggy-arbitrum.vercel.app/
-- **Escrow contract on Arbitrum Sepolia:** [`0xc8e37583151D0c9818dC22E08C8acaDa5B68685b`](https://sepolia.arbiscan.io/address/0xc8e37583151D0c9818dC22E08C8acaDa5B68685b) (source verified)
-- **Agent CDP wallet** — signs `pickup` and `submitProof`: [`0x5Af625519e7e4dFD162aF77e9263EA4604518bfb`](https://sepolia.arbiscan.io/address/0x5Af625519e7e4dFD162aF77e9263EA4604518bfb)
-- **Agent x402 wallet** — pays USDC for premium APIs: [`0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde`](https://sepolia.arbiscan.io/address/0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde)
+- **Escrow contract on Arbitrum Sepolia:** [`0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e`](https://sepolia.arbiscan.io/address/0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e) (source verified)
+- **Agent wallet** — signs `pickup` / `submitProof` on the escrow and pays USDC for premium APIs via x402: [`0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde`](https://sepolia.arbiscan.io/address/0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde)
 - **USDC (Arbitrum Sepolia):** [`0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`](https://sepolia.arbiscan.io/address/0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d)
 - **Backend API:** `https://z0cqktxss0.execute-api.us-east-2.amazonaws.com`
 - **x402-paywalled API:** `https://1zu96s5l2f.execute-api.us-east-2.amazonaws.com/premium-news`

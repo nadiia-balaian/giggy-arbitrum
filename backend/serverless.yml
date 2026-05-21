@@ -26,6 +26,9 @@ provider:
     CDP_API_KEY_SECRET: ${env:CDP_API_KEY_SECRET}
     CDP_WALLET_SECRET: ${env:CDP_WALLET_SECRET}
     X402_CLIENT_PRIVATE_KEY: ${env:X402_CLIENT_PRIVATE_KEY}
+    # Optional dedicated key for escrow pickup/submitProof. Falls back to
+    # X402_CLIENT_PRIVATE_KEY when empty (one EOA for both jobs).
+    AGENT_PRIVATE_KEY: ${env:AGENT_PRIVATE_KEY, ""}
   iam:
     role:
       statements:
