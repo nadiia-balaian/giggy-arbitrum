@@ -15,6 +15,14 @@ provider:
     PRICE_USDC: ${env:PRICE_USDC, "0.01"}
     USDC_ADDRESS: ${env:USDC_ADDRESS, "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"}
     NETWORK: ${env:NETWORK, "arbitrum-sepolia"}
+    X402_NETWORK: ${env:X402_NETWORK, "eip155:421614"}
+    ARBITRUM_SEPOLIA_RPC: ${env:ARBITRUM_SEPOLIA_RPC, "https://sepolia-rollup.arbitrum.io/rpc"}
+    # Facilitator key: defaults to the agent's x402 hot key. Set
+    # X402_FACILITATOR_PRIVATE_KEY in .env to use a dedicated key.
+    # Optional at deploy time; the Lambda fails fast at the first request
+    # if neither key is set.
+    X402_CLIENT_PRIVATE_KEY: ${env:X402_CLIENT_PRIVATE_KEY, ""}
+    X402_FACILITATOR_PRIVATE_KEY: ${env:X402_FACILITATOR_PRIVATE_KEY, ""}
     BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID}
   iam:
     role:

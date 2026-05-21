@@ -1,5 +1,4 @@
 import type { APIGatewayProxyHandlerV2, APIGatewayProxyResultV2 } from "aws-lambda";
-import { HTTPFacilitatorClient } from "@x402/core/server";
 import {
   encodePaymentRequiredHeader,
   encodePaymentResponseHeader,
@@ -11,20 +10,18 @@ import type {
   PaymentRequired,
 } from "@x402/core/types";
 import { invokeClaude } from "./bedrock.js";
+import { localFacilitator } from "./local-facilitator.js";
 
 // GET /premium-news?topic=...
 //
 // HTTP-native paid endpoint, x402 v2 protocol.
-//   1st call (no X-PAYMENT header): returns 402 + PaymentRequired body.
-//   2nd call (valid X-PAYMENT): facilitator verifies + settles the USDC
-//     micropayment on Arbitrum Sepolia (eip155:421614), then we serve the
-//     data with the settled tx hash in the X-PAYMENT-RESPONSE header.
+//   1st call (no PAYMENT-SIGNATURE header): returns 402 + PAYMENT-REQUIRED.
+//   2nd call (signed): we verify the EIP-3009 authorization, settle the USDC
+//     transferWithAuthorization on Arbitrum Sepolia, then serve the data
+//     with the tx hash in the PAYMENT-RESPONSE header.
 //
-// We use the foundation's hosted facilitator at https://x402.org/facilitator
-// (the default — no API key needed). It pays the gas to settle the
-// transferWithAuthorization on-chain, so this Lambda stays gas-free.
-
-const facilitator = new HTTPFacilitatorClient();
+// The settler is in-process (see local-facilitator.ts) because the public
+// x402.org facilitator only covers Base Sepolia today.
 
 const RECIPIENT = (process.env.RECIPIENT_WALLET ??
   "0x0000000000000000000000000000000000000000") as `0x${string}`;
@@ -89,7 +86,9 @@ export const premiumNews: APIGatewayProxyHandlerV2 = async (event) => {
     );
   }
 
-  // 1. Verify (signature + balance + amount) via facilitator
+  const facilitator = localFacilitator();
+
+  // 1. Verify (signature + balance + amount) locally
   const verifyRes = await facilitator.verify(payload, requirements);
   if (!verifyRes.isValid) {
     return paymentRequiredResponse(
@@ -97,7 +96,8 @@ export const premiumNews: APIGatewayProxyHandlerV2 = async (event) => {
     );
   }
 
-  // 2. Settle on-chain — facilitator submits the EIP-3009 transferWithAuthorization
+  // 2. Settle on-chain — this Lambda's facilitator wallet submits
+  //    USDC.transferWithAuthorization on Arbitrum Sepolia
   const settleRes = await facilitator.settle(payload, requirements);
   if (!settleRes.success) {
     return paymentRequiredResponse(
