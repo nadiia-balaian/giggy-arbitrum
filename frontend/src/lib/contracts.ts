@@ -9,6 +9,16 @@ export function parseUsdc(amount: number): bigint {
   return BigInt(Math.round(amount * 1_000_000));
 }
 
+// Permanent EIP-1559 overrides for Arbitrum Sepolia writes. MetaMask's gas
+// estimator routinely underestimates by a few wei against the live base fee,
+// causing "max fee per gas less than block base fee" rejections. Arbitrum
+// Sepolia's typical base fee sits at ~0.02 gwei, so 1 gwei is ~50x headroom
+// at a negligible cost (~$0.00001 per write on testnet).
+export const GAS_OVERRIDES = {
+  maxFeePerGas: BigInt(1_000_000_000),       // 1 gwei
+  maxPriorityFeePerGas: BigInt(100_000_000), // 0.1 gwei
+} as const;
+
 export const escrowAbi = [
   {
     type: "function",

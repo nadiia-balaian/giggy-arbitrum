@@ -11,7 +11,7 @@ import {
 import { arbitrumSepolia } from "wagmi/chains";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts";
+import { ESCROW_ADDRESS, escrowAbi, GAS_OVERRIDES } from "@/lib/contracts";
 import { recordRelease } from "@/lib/api/missions";
 
 type Step = "idle" | "switching" | "releasing" | "syncing" | "done" | "error";
@@ -76,6 +76,7 @@ export function ApproveAction({ missionId }: { missionId: string }) {
         abi: escrowAbi,
         functionName: "release",
         args: [BigInt(numericTaskId)],
+        ...GAS_OVERRIDES,
       });
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       setReleaseTx(txHash);

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Select } from "@/components/ui/Select";
 import { api } from "@/lib/api/client";
-import { ESCROW_ADDRESS, USDC_ADDRESS, escrowAbi, usdcAbi, parseUsdc } from "@/lib/contracts";
+import { ESCROW_ADDRESS, USDC_ADDRESS, escrowAbi, usdcAbi, parseUsdc, GAS_OVERRIDES } from "@/lib/contracts";
 import type { CreateMissionInput, Mission, WorkerType } from "@/types";
 
 const WORKER_OPTIONS: { value: WorkerType; label: string }[] = [
@@ -95,6 +95,7 @@ export default function CreateMissionPage() {
         abi: usdcAbi,
         functionName: "approve",
         args: [ESCROW_ADDRESS, bounty],
+        ...GAS_OVERRIDES,
       });
       await publicClient.waitForTransactionReceipt({ hash: approveTx });
 
@@ -128,6 +129,7 @@ export default function CreateMissionPage() {
         abi: escrowAbi,
         functionName: "createTask",
         args: [bounty, specHash],
+        ...GAS_OVERRIDES,
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: createTx });
 
