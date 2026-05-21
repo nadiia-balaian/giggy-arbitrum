@@ -50,7 +50,7 @@ User wallet (MetaMask)
                                                     │ 4. plan via Bedrock (Claude Sonnet)
                                                     │ 5. GET /premium-news → 402 Payment Required
                                                     │ 6. sign EIP-3009 USDC transfer
-                                                    │     ─► Coinbase x402 facilitator settles on Arbitrum
+                                                    │     ─► self-hosted x402 facilitator settles on Arbitrum
                                                     │     ─► x402-api Lambda calls Bedrock for fresh research
                                                     │ 7. write report via Bedrock
                                                     │ 8. submitProof(taskId, keccak256(report))  ──► Escrow
@@ -63,15 +63,20 @@ User reads report on the live mission page  ◄──────┘
 
 The mission detail page polls the activity feed live every 2.5 seconds, so users watch the agent work step-by-step — including the moment the x402 micropayment lands on Arbitrum Sepolia.
 
+## Why we self-host the x402 facilitator
+
+The x402 protocol's reference facilitator at `x402.org/facilitator` only supports Base Sepolia on EVM today (you can verify this by hitting `/supported` — Arbitrum is not in the list). To run a real x402 endpoint on Arbitrum, the marketplace needs a facilitator that speaks `eip155:421614`.
+
+So we built one. The `x402-api` Lambda runs the full verify + settle pipeline in-process, using `@x402/evm`'s `exact` scheme registered against a local `x402Facilitator` backed by a viem wallet client. Every premium API call the agent makes results in a real on-chain `transferWithAuthorization` on Arbitrum Sepolia — settled by infrastructure we own end-to-end, with no API key for a paid relayer and no Base-shaped detour. The whole thing is about 60 lines (`x402-api/src/local-facilitator.ts`) and can be reused for any other Arbitrum-native x402 endpoint.
+
 ## Built With
 
 ### Arbitrum
 - **[Arbitrum Sepolia](https://docs.arbitrum.io/)** — escrow contract, bounty release, and every x402 micropayment settle here. Native USDC, fast finality, low fees — exactly the chain economics agent-native applications need.
 
-### Coinbase
-- **[x402](https://x402.org)** — HTTP-native autonomous payments. The agent pays for APIs in USDC over the x402 protocol with zero human intervention. We deploy both sides: a paywalled API endpoint and an autonomous client.
-- **Coinbase x402 facilitator** — verify + settle the USDC `transferWithAuthorization` on Arbitrum. We don't run our own settler wallet.
-- **[Coinbase Developer Platform (CDP)](https://docs.cdp.coinbase.com/)** — server-managed wallet for the agent's escrow operations (`pickup`, `submitProof`). Keys never leave Coinbase's secure infra. Arbitrum Sepolia signing supported natively.
+### x402
+- **[x402](https://x402.org)** — HTTP-native autonomous payments. The agent pays for APIs in USDC over the x402 protocol with zero human intervention. We deploy both sides: a paywalled API endpoint and an autonomous client, both speaking x402 v2 with CAIP-2 network identifiers.
+- **Self-hosted x402 facilitator** on Arbitrum Sepolia. Verifies the EIP-3009 signature locally, then submits `USDC.transferWithAuthorization` from a viem wallet client. See the section above for the why.
 
 ### AWS
 - **Amazon Bedrock (Claude Sonnet)** — the agent's brain. Three Bedrock invocations per mission: one to plan, one inside the paid x402-api to generate the research the agent buys, one to write the deliverable.
