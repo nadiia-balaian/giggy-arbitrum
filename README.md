@@ -15,6 +15,7 @@ Embed a fresh Loom recorded against the Arbitrum deploy.
 ## DEMO and Links
 
 - **Live Video Demo:** https://www.loom.com/share/5d0d094f19ac40518686e4aa09622fbb
+- **Pitch Deck:** https://canva.link/4yvddjzfa5pqpmg
 - **App:** https://giggy-arbitrum.vercel.app/
 - **Escrow contract on Arbitrum Sepolia:** [`0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e`](https://sepolia.arbiscan.io/address/0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e) (Solidity, source verified)
 - **AutoVerifier (Stylus, production):** [`0x39A752EAF288eEA121C72CE4A21Eb09550A646F5`](https://sepolia.arbiscan.io/address/0x39A752EAF288eEA121C72CE4A21Eb09550A646F5) — Rust compiled to WASM, activated on Arbitrum Stylus. Live attestations land here.
