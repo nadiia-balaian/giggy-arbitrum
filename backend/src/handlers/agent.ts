@@ -4,6 +4,7 @@ import { getAgentAddress } from "../lib/cdp.js";
 import { invokeClaude } from "../lib/bedrock.js";
 import { fetchNews } from "../lib/news.js";
 import * as escrow from "../lib/escrow.js";
+import { scoreAndAttest } from "../lib/verifier.js";
 import {
   listMissionsByStatus,
   updateMissionStatus,
@@ -110,10 +111,41 @@ async function runScan(): Promise<{
 
   // 6. Generate the report
   await log(mission.id, "writing", "Generating report with Claude...");
+  const requirementsList = mission.requirements.length
+    ? mission.requirements.map((r, i) => `${i + 1}. ${r}`).join("\n")
+    : "(none — judge by the description)";
+  const researchData = articles.length
+    ? articles.map((a) => `- ${a.title}: ${a.summary}`).join("\n")
+    : "(premium API unavailable; rely on training knowledge but mark uncertainty explicitly)";
+
   const report = await invokeClaude(
-    `You are a research agent writing a report for this mission:\n\nTitle: ${mission.title}\nDescription: ${mission.description}\nRequirements: ${mission.requirements.join(", ")}\n\nResearch data:\n${articles.map((a) => `- ${a.title}: ${a.summary}`).join("\n")}\n\nWrite a comprehensive but concise research report (300-500 words). Include specific findings, key players, and actionable insights. Format with markdown headers.`,
-    "You are a professional research analyst. Write clear, factual reports.",
-    1500,
+    `You are a research agent writing a report. You will be evaluated by an
+independent AI verifier against the requirements below. Failure to address
+each requirement, fabrication of sources, or collapsing of requested lists
+will all cause the verdict to fail.
+
+TASK SPEC
+Title: ${mission.title}
+Description: ${mission.description}
+Requirements:
+${requirementsList}
+
+RESEARCH DATA (from the paid premium API)
+${researchData}
+
+RULES
+- Address every numbered requirement explicitly. If the requirement asks
+  for N items, list all N. Never collapse the tail into "+ others" or
+  "and several more".
+- Do NOT invent sources, dates, statistics, or organisation names. If
+  you do not have a fact, write "data unavailable" or omit the claim
+  rather than guessing.
+- Prefer fewer, well-supported claims over many fabricated ones.
+- Match depth to the task: a single-number question needs a paragraph,
+  a top-10 question needs a clear ranked list.
+- Format with markdown headers and lists where it improves clarity.`,
+    "You are a professional research analyst. You never fabricate sources. When a fact is uncertain, you say so. You treat the requirements list as a hard checklist.",
+    3500,
   );
   await log(mission.id, "report_ready", "Report generated");
 
@@ -138,7 +170,44 @@ async function runScan(): Promise<{
     await log(mission.id, "chain_submit", `Skipped on-chain submit: ${(e as Error).message}`);
   }
 
-  // 9. Update status to submitted
+  // 9. AI verifier scores the report and records an on-chain attestation.
+  //    Verdict is advisory — the poster still decides whether to release.
+  try {
+    if (mission.specHash) {
+      const verdict = await scoreAndAttest(mission, report, Number(mission.id));
+
+      await putReport({
+        missionId: mission.id,
+        body: report,
+        reportHash,
+        createdAt: new Date().toISOString(),
+        verdictPassed: verdict.passed,
+        verdictScoreBps: verdict.scoreBps,
+        verdictReasoning: verdict.reasoning,
+        verdictReasoningHash: verdict.reasoningHash,
+        verdictTxHash: verdict.txHash,
+        verdictAt: new Date().toISOString(),
+      });
+
+      const label = verdict.passed ? "PASS" : "FAIL";
+      const pct = (verdict.scoreBps / 100).toFixed(2);
+      await log(
+        mission.id,
+        "ai_verdict",
+        `AI verifier: ${label} (${pct}%) — ${verdict.reasoning}`,
+        verdict.txHash,
+      );
+    }
+  } catch (e) {
+    console.log(`[agent] AI verdict failed: ${(e as Error).message}`);
+    await log(
+      mission.id,
+      "ai_verdict_failed",
+      `AI verdict skipped: ${(e as Error).message}`,
+    );
+  }
+
+  // 10. Update status to submitted
   await updateMissionStatus(mission.id, "submitted", {
     submittedAt: new Date().toISOString(),
     deliverableUrl: `/api/missions/${mission.id}/report`,

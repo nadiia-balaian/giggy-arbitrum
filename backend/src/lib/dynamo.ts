@@ -154,6 +154,15 @@ export interface ReportRow {
   body: string;
   reportHash: string;
   createdAt: string;
+  // Optional AI verifier verdict, attached after the AutoVerifier Lambda
+  // scores the report. The reasoning hash also lives on-chain (see
+  // AutoVerifier.attest); the full text stays here to keep gas costs low.
+  verdictPassed?: boolean;
+  verdictScoreBps?: number;
+  verdictReasoning?: string;
+  verdictReasoningHash?: string;
+  verdictTxHash?: string;
+  verdictAt?: string;
 }
 
 export async function putReport(row: ReportRow): Promise<void> {

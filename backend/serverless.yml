@@ -29,6 +29,11 @@ provider:
     # Optional dedicated key for escrow pickup/submitProof. Falls back to
     # X402_CLIENT_PRIVATE_KEY when empty (one EOA for both jobs).
     AGENT_PRIVATE_KEY: ${env:AGENT_PRIVATE_KEY, ""}
+    # AI verdict signer + on-chain AutoVerifier contract address. The
+    # verifier's key is a separate EOA so judges can distinguish "agent
+    # signed this" from "scorer signed this" on Arbiscan.
+    AUTOVERIFIER_ADDRESS: ${env:AUTOVERIFIER_ADDRESS}
+    VERIFIER_PRIVATE_KEY: ${env:VERIFIER_PRIVATE_KEY}
   iam:
     role:
       statements:
