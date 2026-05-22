@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/StatusBadge";
 import { formatUsd } from "@/lib/utils";
 import { ApproveAction } from "./ApproveAction";
+import { AIVerdict } from "./AIVerdict";
 import { DownloadReportButton } from "@/components/missions/DownloadReportButton";
 import { MissionActivity } from "@/components/missions/MissionActivity";
 import { MissionAutoRefresh } from "./MissionAutoRefresh";
@@ -101,6 +102,8 @@ export default async function MissionDetailPage({
           {mission.status !== "open" ? (
             <MissionActivity missionId={mission.id} status={mission.status} />
           ) : null}
+
+          {report ? <AIVerdict report={report} /> : null}
 
           {report ? (
             <section className="select-text rounded-3xl border-ink-3 bg-white p-7 shadow-doodle">

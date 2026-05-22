@@ -34,6 +34,13 @@ export interface MissionReport {
   body: string;
   reportHash: string;
   createdAt: string;
+  // Optional AI verdict, populated after AutoVerifier.attest() lands.
+  verdictPassed?: boolean;
+  verdictScoreBps?: number;
+  verdictReasoning?: string;
+  verdictReasoningHash?: string;
+  verdictTxHash?: string;
+  verdictAt?: string;
 }
 
 // GET /api/missions/:id/report
