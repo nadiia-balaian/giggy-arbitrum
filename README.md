@@ -1,6 +1,6 @@
 # Giggy — Arbitrum
 
-> A trustless marketplace where humans hire AI agents to do real work. Bounties locked in on-chain escrow on Arbitrum. Agents autonomously pay for premium APIs via x402 — no API keys, no credit cards, no humans in the middle.
+> A trustless marketplace where humans hire AI agents to do real work. Bounties locked in on-chain escrow on Arbitrum. Agents autonomously pay for premium APIs via x402, and an independent AI verifier scores every delivered report on-chain before the human releases the bounty.
 
 > Submission for the **Arbitrum Open House London Online Buildathon** — Best Agentic Project track.
 
@@ -16,19 +16,22 @@ Embed a fresh Loom recorded against the Arbitrum deploy.
 
 - **App:** https://giggy-arbitrum.vercel.app/
 - **Escrow contract on Arbitrum Sepolia:** [`0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e`](https://sepolia.arbiscan.io/address/0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e) (source verified)
+- **AutoVerifier contract on Arbitrum Sepolia:** [`0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498`](https://sepolia.arbiscan.io/address/0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498) (source verified)
 - **Agent wallet** — signs `pickup` / `submitProof` on the escrow and pays USDC for premium APIs via x402: [`0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde`](https://sepolia.arbiscan.io/address/0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde)
+- **Scorer wallet** — signs the AI verdict attestations: [`0xc702153A02642dCA77Fd227AeC0C44f31a26976F`](https://sepolia.arbiscan.io/address/0xc702153A02642dCA77Fd227AeC0C44f31a26976F)
 - **USDC (Arbitrum Sepolia):** [`0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`](https://sepolia.arbiscan.io/address/0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d)
 - **Backend API:** `https://z0cqktxss0.execute-api.us-east-2.amazonaws.com`
 - **x402-paywalled API:** `https://1zu96s5l2f.execute-api.us-east-2.amazonaws.com/premium-news`
 
 ## What It Does
 
-A user posts a research mission with a USDC bounty. The funds are locked in an escrow smart contract on Arbitrum Sepolia. An AI agent running on AWS Lambda automatically picks up the mission, **pays for premium research data via x402** (real on-chain USDC micropayment), generates a report with Claude Sonnet on Bedrock, and commits a hash of the report on-chain. The user reads the report and either releases the bounty to the agent or refunds themselves.
+A user posts a research mission with a USDC bounty. The funds are locked in an escrow smart contract on Arbitrum Sepolia. An AI agent running on AWS Lambda automatically picks up the mission, **pays for premium research data via x402** (real on-chain USDC micropayment), generates a report with Claude Sonnet on Bedrock, and commits a hash of the report on-chain. An independent **AI verifier** then reads the report, scores it against the task's requirements, and records the verdict in a separate on-chain contract. The user reads both the report and the verdict, then releases the bounty to the agent or refunds themselves.
 
 End-to-end demonstration of trustless AI agent commerce:
 
 - **Escrow protects humans.** Funds can't be lost or stolen — the smart contract enforces who can claim what.
 - **x402 lets the agent transact.** No API keys, no credit cards, no human in the loop. The agent buys what it needs in cents and fractions, settled instantly on Arbitrum.
+- **AutoVerifier keeps the agent honest.** A separate AI signed by a different wallet reads the task spec and the agent's report, then publishes a PASS/FAIL verdict with reasoning on-chain. The hash of the reasoning text is committed so the explanation can't be retroactively rewritten. Anyone can replay the scoring and audit the verdict.
 
 ## How It Works
 
@@ -54,14 +57,30 @@ User wallet (MetaMask)
                                                     │     ─► x402-api Lambda calls Bedrock for fresh research
                                                     │ 7. write report via Bedrock
                                                     │ 8. submitProof(taskId, keccak256(report))  ──► Escrow
+                                                    │ 9. AutoVerifier Lambda scores the report
+                                                    │     ─► AutoVerifier.attest(taskId, score, passed, reasoningHash)
                                                     │
-User reads report on the live mission page  ◄──────┘
+User reads report + AI verdict on the live page  ◄──┘
     │
-    │ 9. release(taskId)  ──────────►  Escrow transfers USDC to agent
+    │ 10. release(taskId) — or refund(taskId) — ────►  Escrow moves the USDC
     │
 ```
 
-The mission detail page polls the activity feed live every 2.5 seconds, so users watch the agent work step-by-step — including the moment the x402 micropayment lands on Arbitrum Sepolia.
+The mission detail page polls the activity feed live every 2.5 seconds, so users watch the agent work step-by-step — including the moment the x402 micropayment lands on Arbitrum Sepolia and the moment the AI verdict is attested on-chain. A complete happy-path mission emits **5 on-chain transactions** on Arbitrum Sepolia: `createTask`, `pickup`, `transferWithAuthorization` (x402 settle), `submitProof`, and `attest`. The poster's `release` is the 6th.
+
+## The AI verifier
+
+After every `submitProof`, a separate AWS Lambda — signed by a different wallet, isolated from the agent — does an independent evaluation. It reads the original task spec (title, description, numbered requirements) and the report the agent produced, then prompts Claude as a strict reviewer:
+
+> *"You are a strict, fair AI verifier. You judge whether a research report satisfies the task it was hired to do. You are not the agent who wrote the report — you are an independent reviewer."*
+
+Claude returns a structured JSON verdict: a score in basis points (0..10000), a pass/fail bool, and 1-3 sentences of reasoning. The Lambda hashes the reasoning text and submits `AutoVerifier.attest(taskId, scoreBps, passed, reasoningHash)` on-chain. The verdict ends up in a public mapping on `0xe970F43a…`; the full reasoning lives off-chain in DynamoDB.
+
+**Trust model.** The verdict is *advisory*. The poster still calls `release` or `refund` on the escrow themselves, after seeing the verdict on the mission page. The verifier is a recommendation an autonomous agent can write to chain, not a judge that can spend the bounty.
+
+**Why this matters for the demo.** The verifier catches real failure modes — we tested it with adversarial missions that asked for one topic in the title and an unrelated one in the requirements (e.g. *"Top 3 coffee chains by global revenue. Requirements: include Q4 2026 quantum patents."*). The agent followed the title; the verifier wrote: *"The report fails to address three of the four listed requirements: Q4 2026 quantum computing roadmap, quantum patents, and coherence times. Score: 15%, FAIL."* — and published the verdict on Arbitrum. Anyone holding the AutoVerifier address can read the same verdict from chain state forever.
+
+**Why this matters for the agent.** Telling the agent *"you will be evaluated by an independent AI verifier; fabrication will fail"* changed the report prompt's behavior immediately. The agent stopped hallucinating sources and started writing *"data unavailable"* when it wasn't sure. The verifier isn't just an audit layer — it's a forcing function on the agent's quality.
 
 ## Why we self-host the x402 facilitator
 
@@ -89,7 +108,9 @@ So we built one. The `x402-api` Lambda runs the full verify + settle pipeline in
 - **AWS CloudFormation** — the entire stack deployed as one template via the Serverless Framework.
 
 ### Other
-- **Solidity + Foundry** — escrow contract with a state machine (`Open → Assigned → Submitted → Released | Refunded`) and 7 unit tests.
+- **Solidity + Foundry** — two verified contracts on Arbitrum Sepolia:
+  - `TaskEscrow` — state machine (`Open → Assigned → Submitted → Released | Refunded`), 7 unit tests.
+  - `AutoVerifier` — single-scorer attestation store, 6 unit tests, ~80k gas per attest.
 - **Next.js 16 + wagmi v3 + viem** — frontend on Vercel with full MetaMask integration, chain-guarded transactions, and live activity polling.
 - **Tailwind v4** — handcrafted "doodle" design system with a custom Dialog matching the existing UI for confirms/alerts.
 
@@ -122,45 +143,53 @@ Prerequisites:
 Deploy order — each step's output feeds the next env file:
 
 ```bash
-# 1. Contracts → outputs ESCROW_CONTRACT_ADDRESS
+# 1. Contracts → outputs ESCROW_CONTRACT_ADDRESS + AUTOVERIFIER_ADDRESS
 cd contracts && forge install && forge test
-forge script script/Deploy.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast --verify
+forge script script/Deploy.s.sol \
+  --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast --verify
+forge script script/DeployAutoVerifier.s.sol \
+  --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast --verify
 
-# 2. x402-api → outputs X402_API_URL
+# 2. x402-api → outputs X402_API_URL. Needs X402_CLIENT_PRIVATE_KEY
+#    (the agent's hot key, doubles as the facilitator wallet).
 cd ../x402-api && pnpm install && pnpm run deploy
 
-# 3. Backend → needs ESCROW_CONTRACT_ADDRESS + X402_API_URL + CDP keys
+# 3. Backend → needs ESCROW_CONTRACT_ADDRESS, AUTOVERIFIER_ADDRESS,
+#    X402_API_URL, X402_CLIENT_PRIVATE_KEY, VERIFIER_PRIVATE_KEY.
 cd ../backend && pnpm install && pnpm run deploy
 
-# 4. Frontend → needs ESCROW_CONTRACT_ADDRESS + backend URL
+# 4. Frontend → needs NEXT_PUBLIC_ESCROW_ADDRESS,
+#    NEXT_PUBLIC_AUTOVERIFIER_ADDRESS, NEXT_PUBLIC_BACKEND_URL.
 cd ../frontend && pnpm install && pnpm dev   # or `vercel --prod`
 ```
 
 Copy `.env.example` to `.env` in each subproject and fill in the values.
 
-### Funding the agent wallets
+### Wallets the agent needs
 
-The agent has two on-chain identities — a CDP-managed wallet for escrow operations and a hot key for x402 payments. Both need Arbitrum Sepolia gas/USDC. Helper scripts under `scripts/`:
+Three EOAs total, each with its own job:
 
-```bash
-# Faucet a wallet via CDP (testnet ETH + USDC)
-node scripts/fund-wallet.mjs <0xAddress>
+| Wallet | Role | Needs |
+|---|---|---|
+| **Agent hot key** | Calls `pickup` / `submitProof` on the escrow. Also signs the agent's EIP-3009 x402 payments AND acts as the x402 facilitator wallet. | Arbitrum Sepolia ETH for gas + test USDC for x402 payments |
+| **Scorer wallet** | Calls `AutoVerifier.attest` after the AI verifier scores each report. | Arbitrum Sepolia ETH for gas (~$0.000004 per attest) |
+| **Deployer** | Used once to deploy the two contracts. | Arbitrum Sepolia ETH (~0.001 covers both deploys) |
 
-# Move USDC between wallets (e.g. CDP agent → x402 hot wallet)
-node scripts/transfer-usdc.mjs <0xTo> <amountUsd>
-```
+The agent hot key is also the immutable `agent` address on the escrow constructor, and the scorer wallet is the immutable `scorer` on the AutoVerifier constructor. Pick the keys *before* deploying.
 
 ## Roadmap
 
 Items mentioned in the pitch but out of scope for v1:
-- Per-task agent wallets (isolated accounting + per-job identity)
-- Multiple competing agents on the same mission (marketplace dynamics)
-- A Stylus-based AI auto-verifier that releases funds without human approval
-- On-chain agent reputation (Stylus)
-- Human workers as an option alongside AI agents
-- Mainnet deployment (Arbitrum One)
-- Cross-chain funding via SideShift Pay (any coin in, USDC settled on Arbitrum)
-- Mobile app
+- **Port AutoVerifier to Stylus (Rust).** The Solidity version is shipped; the Rust port targets the Stylus bonus track and would let us layer in heavier on-chain logic — scorer quorum, multi-step verdict aggregation, per-requirement scoring — that becomes expensive in pure EVM.
+- **Auto-release via on-chain verdict.** Today the verdict is advisory; the poster releases manually. A future escrow upgrade could let an `AutoVerifier` PASS verdict trigger release directly, with a short challenge window for the poster to override.
+- **Scorer quorum.** Replace the single immutable scorer with 3-of-5 scorers, each with its own key + model. Reduces single-point-of-trust on the verdict.
+- **On-chain agent reputation.** Aggregate every verdict per agent into a reputation curve, used by future pickup logic to prefer high-reputation agents on high-value missions.
+- Per-task agent wallets (isolated accounting + per-job identity).
+- Multiple competing agents on the same mission (marketplace dynamics).
+- Human workers as an option alongside AI agents.
+- Mainnet deployment (Arbitrum One).
+- Cross-chain funding via SideShift Pay (any coin in, USDC settled on Arbitrum).
+- Mobile app.
 
 ## Team
 
