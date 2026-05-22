@@ -45,6 +45,9 @@ export default function CreateMissionPage() {
   const onWrongChain = isConnected && walletChainId !== arbitrumSepolia.id;
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Form is locked while a tx is in flight. We re-enable on terminal "done"
+  // (right before the redirect) and on "error" so the user can retry.
+  const submitting = step !== "idle" && step !== "error" && step !== "done";
 
   const [form, setForm] = useState<CreateMissionInput>({
     title: "",
@@ -189,6 +192,8 @@ export default function CreateMissionPage() {
         onSubmit={onSubmit}
         className="rounded-3xl border-ink-3 bg-coral p-8 shadow-doodle-lg"
       >
+        {/* fieldset[disabled] cascades to every form control inside */}
+        <fieldset disabled={submitting} className="contents">
         <div className="flex flex-col gap-5">
           <Input
             label="Mission Title"
@@ -261,7 +266,7 @@ export default function CreateMissionPage() {
             type="submit"
             variant="primary"
             size="lg"
-            disabled={step !== "idle" && step !== "error"}
+            disabled={submitting}
             className="mt-2 w-full"
           >
             {!isConnected
@@ -271,6 +276,7 @@ export default function CreateMissionPage() {
                 : STEP_LABELS[step]}
           </Button>
         </div>
+        </fieldset>
       </form>
     </div>
   );
