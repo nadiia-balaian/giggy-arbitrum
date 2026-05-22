@@ -15,8 +15,9 @@ Embed a fresh Loom recorded against the Arbitrum deploy.
 ## Live Demo
 
 - **App:** https://giggy-arbitrum.vercel.app/
-- **Escrow contract on Arbitrum Sepolia:** [`0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e`](https://sepolia.arbiscan.io/address/0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e) (source verified)
-- **AutoVerifier contract on Arbitrum Sepolia:** [`0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498`](https://sepolia.arbiscan.io/address/0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498) (source verified)
+- **Escrow contract on Arbitrum Sepolia:** [`0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e`](https://sepolia.arbiscan.io/address/0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e) (Solidity, source verified)
+- **AutoVerifier (Stylus, production):** [`0x39A752EAF288eEA121C72CE4A21Eb09550A646F5`](https://sepolia.arbiscan.io/address/0x39A752EAF288eEA121C72CE4A21Eb09550A646F5) — Rust compiled to WASM, activated on Arbitrum Stylus. Live attestations land here.
+- **AutoVerifier (Solidity, v1 reference):** [`0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498`](https://sepolia.arbiscan.io/address/0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498) — ABI-identical Solidity baseline, kept deployed for side-by-side comparison.
 - **Agent wallet** — signs `pickup` / `submitProof` on the escrow and pays USDC for premium APIs via x402: [`0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde`](https://sepolia.arbiscan.io/address/0x39a2930c9bAb0F58B4EE07F76685f549b9E14Dde)
 - **Scorer wallet** — signs the AI verdict attestations: [`0xc702153A02642dCA77Fd227AeC0C44f31a26976F`](https://sepolia.arbiscan.io/address/0xc702153A02642dCA77Fd227AeC0C44f31a26976F)
 - **USDC (Arbitrum Sepolia):** [`0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`](https://sepolia.arbiscan.io/address/0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d)
@@ -82,6 +83,21 @@ Claude returns a structured JSON verdict: a score in basis points (0..10000), a 
 
 **Why this matters for the agent.** Telling the agent *"you will be evaluated by an independent AI verifier; fabrication will fail"* changed the report prompt's behavior immediately. The agent stopped hallucinating sources and started writing *"data unavailable"* when it wasn't sure. The verifier isn't just an audit layer — it's a forcing function on the agent's quality.
 
+### Two implementations: Solidity + Stylus, ABI-identical, WASM in production
+
+We shipped the AutoVerifier twice on Arbitrum Sepolia and run the Stylus version in production:
+
+| Implementation | Address | Role | Source |
+|---|---|---|---|
+| **Stylus (Rust → WASM)** | [`0x39A752…646F5`](https://sepolia.arbiscan.io/address/0x39A752EAF288eEA121C72CE4A21Eb09550A646F5) | Live attestations — the verdict you see in the UI was written here. | `stylus/autoverifier/src/lib.rs` |
+| **Solidity** | [`0xe970F4…9498`](https://sepolia.arbiscan.io/address/0xe970F43a3CDd2BB5cc1B903540E73Af8d4489498) | v1 reference, ~80k gas per `attest`, 6 unit tests. | `contracts/src/AutoVerifier.sol` |
+
+Both contracts expose the same `attest` selector, same `AttestationRecorded` event, same custom errors, same `attestations(uint256)` mapping getter. The backend Lambda doesn't know — and doesn't need to know — which one it's calling; swapping production from EVM to WASM was a one-line `AUTOVERIFIER_ADDRESS` env var change.
+
+**Why Stylus is the right target for the verifier.** The v2 roadmap items we sketched (scorer quorum, on-chain reputation curves, per-requirement scoring) involve more compute than pure storage writes. Stylus runs WASM at near-native speed and prices compute at a fraction of EVM gas, so those extensions become tractable here in a way they wouldn't be in pure Solidity. The v1 we're running today is small enough that the gas difference is modest — the Stylus contract is 16 KB and costs ~0.000114 ETH to activate one-time. The win is the trajectory it unlocks.
+
+**Why we shipped both.** Solidity first, as a reference we could test against Foundry tooling and verify on Arbiscan with one command. Stylus second, once the scoring loop was proven end-to-end. Keeping the Solidity contract deployed means anyone can compare ABI, gas, and deployment cost between the EVM and WASM versions of identical logic, on the same chain, with the same scorer key.
+
 ## Why we self-host the x402 facilitator
 
 The x402 protocol's reference facilitator at `x402.org/facilitator` only supports Base Sepolia on EVM today (you can verify this by hitting `/supported` — Arbitrum is not in the list). To run a real x402 endpoint on Arbitrum, the marketplace needs a facilitator that speaks `eip155:421614`.
@@ -97,6 +113,10 @@ So we built one. The `x402-api` Lambda runs the full verify + settle pipeline in
 - **[x402](https://x402.org)** — HTTP-native autonomous payments. The agent pays for APIs in USDC over the x402 protocol with zero human intervention. We deploy both sides: a paywalled API endpoint and an autonomous client, both speaking x402 v2 with CAIP-2 network identifiers.
 - **Self-hosted x402 facilitator** on Arbitrum Sepolia. Verifies the EIP-3009 signature locally, then submits `USDC.transferWithAuthorization` from a viem wallet client. See the section above for the why.
 
+### Stylus (Rust → WASM)
+- **[Stylus](https://docs.arbitrum.io/stylus/stylus-gentle-introduction)** — Arbitrum's WASM contract VM. Our production `AutoVerifier` is a Rust contract built with `stylus-sdk 0.10` and `cargo-stylus 0.10.7`, compiled to a 16 KB WASM binary, activated on Arbitrum Sepolia for a one-time 0.000114 ETH fee. Same chain as our Solidity contracts, same Arbiscan tab, same `cast` tooling.
+- **ABI-identical to the Solidity version** so the backend Lambda needed no code changes — just a new contract address. The Solidity version remains deployed as the v1 reference; the Stylus version is the live verifier.
+
 ### AWS
 - **Amazon Bedrock (Claude Sonnet)** — the agent's brain. Three Bedrock invocations per mission: one to plan, one inside the paid x402-api to generate the research the agent buys, one to write the deliverable.
 - **AWS Lambda** — the entire backend. 10 functions covering mission CRUD, deliverable serving, the agent runner, and the agent cron.
@@ -108,9 +128,9 @@ So we built one. The `x402-api` Lambda runs the full verify + settle pipeline in
 - **AWS CloudFormation** — the entire stack deployed as one template via the Serverless Framework.
 
 ### Other
-- **Solidity + Foundry** — two verified contracts on Arbitrum Sepolia:
+- **Solidity + Foundry** — verified contracts on Arbitrum Sepolia:
   - `TaskEscrow` — state machine (`Open → Assigned → Submitted → Released | Refunded`), 7 unit tests.
-  - `AutoVerifier` — single-scorer attestation store, 6 unit tests, ~80k gas per attest.
+  - `AutoVerifier` (Solidity v1) — single-scorer attestation store, 6 unit tests, ~80k gas per attest. Companion to the Stylus port above.
 - **Next.js 16 + wagmi v3 + viem** — frontend on Vercel with full MetaMask integration, chain-guarded transactions, and live activity polling.
 - **Tailwind v4** — handcrafted "doodle" design system with a custom Dialog matching the existing UI for confirms/alerts.
 
@@ -118,11 +138,12 @@ So we built one. The `x402-api` Lambda runs the full verify + settle pipeline in
 
 ```
 .
-├── contracts/    Solidity escrow                (Foundry)
-├── backend/      Main API + agent runner        (Serverless on AWS Lambda)
-├── x402-api/     Paid endpoint the agent calls  (Serverless on AWS Lambda)
-├── frontend/     Web app                        (Next.js → Vercel)
-├── scripts/      One-off helpers                (CDP faucet, USDC transfers)
+├── contracts/    Solidity escrow + AutoVerifier v1     (Foundry)
+├── stylus/       AutoVerifier in Rust/WASM, production (cargo-stylus)
+├── backend/      Main API + agent + AI verifier        (Serverless on AWS Lambda)
+├── x402-api/     Paid endpoint + self-hosted facilitator (Serverless on AWS Lambda)
+├── frontend/     Web app                               (Next.js → Vercel)
+├── scripts/      One-off helpers                       (USDC transfers, etc.)
 ├── PLAN.md       Build plan + demo script
 └── README.md
 ```
@@ -134,21 +155,29 @@ Each subproject deploys independently. The `PLAN.md` file documents every phase 
 Prerequisites:
 - Node 20+ and pnpm
 - [Foundry](https://book.getfoundry.sh/getting-started/installation) (`curl -L https://foundry.paradigm.xyz | bash && foundryup`)
+- Rust toolchain via [rustup](https://rustup.rs/) + `wasm32-unknown-unknown` target + `cargo-stylus` — only needed if you want to rebuild / redeploy the Stylus AutoVerifier
 - AWS CLI configured (`aws configure`)
 - Serverless Framework (`pnpm add -g serverless`)
 - An Arbitrum Sepolia wallet funded with test ETH and test USDC
-- A Coinbase Developer Platform project (API key + secret + wallet secret)
 - AWS Bedrock access to `anthropic.claude-sonnet-4-*` in your chosen region
 
 Deploy order — each step's output feeds the next env file:
 
 ```bash
-# 1. Contracts → outputs ESCROW_CONTRACT_ADDRESS + AUTOVERIFIER_ADDRESS
+# 1a. Solidity contracts → outputs ESCROW_CONTRACT_ADDRESS + AUTOVERIFIER_ADDRESS
 cd contracts && forge install && forge test
 forge script script/Deploy.s.sol \
   --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast --verify
 forge script script/DeployAutoVerifier.s.sol \
   --rpc-url $ARBITRUM_SEPOLIA_RPC --broadcast --verify
+
+# 1b. (optional) Stylus AutoVerifier — production deploys point at this
+cd ../stylus/autoverifier
+cargo stylus check --endpoint=$ARBITRUM_SEPOLIA_RPC
+cargo stylus deploy --endpoint=$ARBITRUM_SEPOLIA_RPC --private-key=$PRIVATE_KEY
+# After deploy, call initialize(scorer) once via:
+# cast send <stylus-addr> "initialize(address)" $SCORER_ADDRESS
+#   --rpc-url $ARBITRUM_SEPOLIA_RPC --private-key $PRIVATE_KEY
 
 # 2. x402-api → outputs X402_API_URL. Needs X402_CLIENT_PRIVATE_KEY
 #    (the agent's hot key, doubles as the facilitator wallet).
@@ -179,11 +208,12 @@ The agent hot key is also the immutable `agent` address on the escrow constructo
 
 ## Roadmap
 
-Items mentioned in the pitch but out of scope for v1:
-- **Port AutoVerifier to Stylus (Rust).** The Solidity version is shipped; the Rust port targets the Stylus bonus track and would let us layer in heavier on-chain logic — scorer quorum, multi-step verdict aggregation, per-requirement scoring — that becomes expensive in pure EVM.
+Items mentioned in the pitch but out of scope for v1. Stylus port already shipped, see above.
+
 - **Auto-release via on-chain verdict.** Today the verdict is advisory; the poster releases manually. A future escrow upgrade could let an `AutoVerifier` PASS verdict trigger release directly, with a short challenge window for the poster to override.
-- **Scorer quorum.** Replace the single immutable scorer with 3-of-5 scorers, each with its own key + model. Reduces single-point-of-trust on the verdict.
-- **On-chain agent reputation.** Aggregate every verdict per agent into a reputation curve, used by future pickup logic to prefer high-reputation agents on high-value missions.
+- **Scorer quorum.** Replace the single immutable scorer with 3-of-5 scorers, each with its own key + model. Reduces single-point-of-trust on the verdict. Stylus is now the natural home for this — the per-attestation math grows past what's economical in pure EVM.
+- **On-chain agent reputation.** Aggregate every verdict per agent into a reputation curve, used by future pickup logic to prefer high-reputation agents on high-value missions. Another Stylus-shaped workload.
+- **Per-requirement scoring.** Today the verifier emits one aggregate score per task. v2 could attest a vector of per-requirement scores so the UI can render exactly which requirements failed.
 - Per-task agent wallets (isolated accounting + per-job identity).
 - Multiple competing agents on the same mission (marketplace dynamics).
 - Human workers as an option alongside AI agents.
