@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Outer disc: bg-sky filled, ink border. Matches the brand mark in Sidebar.tsx -->
+  <circle cx="16" cy="16" r="14" fill="#7cc6e8" stroke="#0a0a0a" stroke-width="2.5"/>
+  <!-- Inner ring: transparent fill, ink stroke, ~33% of outer (matches size-3 / size-9 ratio) -->
+  <circle cx="16" cy="16" r="5" fill="none" stroke="#0a0a0a" stroke-width="2"/>
+</svg>
