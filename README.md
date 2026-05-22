@@ -12,8 +12,9 @@ Drop `docs/hero.png` here — ideally a mission detail page in `Submitted` state
 Embed a fresh Loom recorded against the Arbitrum deploy.
 -->
 
-## Live Demo
+## DEMO and Links
 
+- **Live Video Demo:** https://www.loom.com/share/5d0d094f19ac40518686e4aa09622fbb
 - **App:** https://giggy-arbitrum.vercel.app/
 - **Escrow contract on Arbitrum Sepolia:** [`0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e`](https://sepolia.arbiscan.io/address/0x46dd2C6d22B713A8b4F894a882014fbccDdF6d5e) (Solidity, source verified)
 - **AutoVerifier (Stylus, production):** [`0x39A752EAF288eEA121C72CE4A21Eb09550A646F5`](https://sepolia.arbiscan.io/address/0x39A752EAF288eEA121C72CE4A21Eb09550A646F5) — Rust compiled to WASM, activated on Arbitrum Stylus. Live attestations land here.
@@ -221,9 +222,9 @@ Items mentioned in the pitch but out of scope for v1. Stylus port already shippe
 - Cross-chain funding via SideShift Pay (any coin in, USDC settled on Arbitrum).
 - Mobile app.
 
-## Team
+## Team and contact information:
 
-- **Kenny Johns** — [@kenjohnscreates](https://github.com/kenjohnscreates)
+- **Kenny Johns** — [@kenjohnscreates](https://github.com/kenjohnscreates) TG and X: kenjohnscreates
 - **Nadiia Balaian** — [@nadiia-balaian](https://github.com/nadiia-balaian)
 
 ---
