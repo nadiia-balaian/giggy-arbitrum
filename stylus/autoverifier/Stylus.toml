@@ -1,0 +1,8 @@
+# cargo-stylus configuration. AutoVerifier as a single-contract Stylus
+# workspace. Networks are passed via --endpoint on the command line, so
+# the [networks] block is left empty here.
+[workspace]
+
+[workspace.networks]
+
+[contract]

@@ -42,6 +42,12 @@ contracts/broadcast/
 contracts/lib/
 !contracts/lib/.gitkeep
 
+# Rust / Stylus
+# Cargo.lock is tracked on purpose: cargo-stylus folds it into the
+# deployment hash so the WASM bytecode is reproducible.
+stylus/**/target/
+**/*.rs.bk
+
 # AWS / deploy artifacts
 .aws-sam/
 *.zip

@@ -1,0 +1,5 @@
+[toolchain]
+# cargo-stylus requires a pinned version for reproducible WASM. We pin to
+# the latest stable at the time of writing — bump as new Rust releases.
+channel = "1.95.0"
+targets = ["wasm32-unknown-unknown"]

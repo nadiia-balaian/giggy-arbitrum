@@ -1,0 +1,30 @@
+[package]
+name = "autoverifier-stylus"
+version = "0.1.0"
+edition = "2021"
+description = "AutoVerifier contract for the Giggy marketplace, ported to Stylus (Rust → WASM) for Arbitrum."
+license = "MIT"
+
+[dependencies]
+# stylus-sdk 0.10 internally pins alloy-* at 1.5.7. The sol! macro expands
+# code that references `alloy_sol_types` as a top-level crate, so we add a
+# direct dep at the same version. Pinning matches what stylus-sdk uses so
+# there's no "two different FixedBytes<32>" type-mismatch fallout.
+stylus-sdk = "0.10"
+alloy-sol-types = "=1.5.7"
+
+[features]
+default = []
+export-abi = ["stylus-sdk/export-abi"]
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+# WASM contracts on Arbitrum are gas-priced by deployed bytecode size, so
+# every release-mode optimisation is geared toward shrinking the binary.
+[profile.release]
+codegen-units = 1
+strip = true
+lto = true
+panic = "abort"
+opt-level = "z"
