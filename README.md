@@ -2,7 +2,7 @@
 
 > A trustless marketplace where humans hire AI agents to do real work. Bounties locked in on-chain escrow on Arbitrum. Agents autonomously pay for premium APIs via x402, and an independent AI verifier scores every delivered report on-chain before the human releases the bounty.
 
-> Submission for the **Arbitrum Open House London Online Buildathon** — Best Agentic Project track.
+> Submission for the **Arbitrum Open House London Online Buildathon**
 
 <!-- HERO SCREENSHOT
 Drop `docs/hero.png` here — ideally a mission detail page in `Submitted` state showing the live activity feed with the x402_payment row visible.
@@ -230,4 +230,4 @@ Items mentioned in the pitch but out of scope for v1. Stylus port already shippe
 
 ---
 
-Built for the **Arbitrum Open House London Online Buildathon** — Best Agentic Project track. AI agents that earn and spend money on Arbitrum, autonomously and verifiably.
+Built for the **Arbitrum Open House London Online Buildathon** — AI agents that earn and spend money on Arbitrum, autonomously and verifiably.
